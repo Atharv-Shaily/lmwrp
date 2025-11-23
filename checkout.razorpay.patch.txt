@@ -1,0 +1,87 @@
+/*
+Suggested patch to replace the existing Stripe 'online' flow in pages/checkout.tsx.
+Find the block:
+
+if (data.paymentMethod === 'online') {
+  // Create payment intent first
+  ...
+  const paymentResponse = await axios.post('/api/payments/create-intent', { amount: total, orderId: 'temp' });
+  // Create order with payment intent
+  const orderResponse = await axios.post('/api/orders', orderData);
+  await axios.patch(`/api/orders/${orderResponse.data._id}`, { paymentId: paymentResponse.data.paymentIntentId });
+  // Redirect to Stripe checkout...
+}
+
+Replace it with the Razorpay flow below (this uses NEXT_PUBLIC_RZP_KEY_ID or RZP_KEY_ID server-side):
+
+// --- Begin Razorpay integration snippet ---
+if (data.paymentMethod === 'online') {
+  // compute subtotal/tax/shipping/total as before
+  // create order (DB order) first so we have an order _id to attach to razorpay order
+  const orderResponse = await axios.post('/api/orders', orderData);
+  const orderId = orderResponse.data._id;
+
+  // create razorpay order on server
+  // IMPORTANT: pass amount in paise (total * 100) if total is in rupees
+  const rzpResp = await axios.post('/api/payments/razorpay/create-order', {
+    amount: Math.round(total * 100), // rupees -> paise
+    currency: 'INR',
+    orderId,
+  });
+
+  const { order: razorpayOrder, key } = rzpResp.data;
+  const options = {
+    key: key, // from server (NEXT_PUBLIC_RZP_KEY_ID)
+    amount: razorpayOrder.amount,
+    currency: razorpayOrder.currency,
+    name: 'Your Company',
+    description: 'Order Payment',
+    order_id: razorpayOrder.id,
+    handler: async function (response) {
+      // response: { razorpay_payment_id, razorpay_order_id, razorpay_signature }
+      // verify on server
+      const verify = await axios.post('/api/payments/razorpay/verify-payment', {
+        ...response,
+        orderId,
+      });
+      if (verify.data.verified) {
+        toast.success('Payment successful and verified!');
+        router.push(`/orders/${orderId}`);
+      } else {
+        toast.error('Payment verification failed');
+        router.push(`/orders/${orderId}`);
+      }
+    },
+    prefill: { name: '', email: '' },
+    theme: { color: '#3399cc' }
+  };
+
+  // dynamically load razorpay checkout script then open
+  const loadScript = (src) => new Promise((resolve) => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+
+  const res = await loadScript('https://checkout.razorpay.com/v1/checkout.js');
+  if (!res) {
+    toast.error('Razorpay SDK failed to load.');
+    return;
+  }
+
+  const rzp = new (window as any).Razorpay(options);
+  rzp.open();
+}
+// --- End Razorpay integration snippet ---
+
+Notes:
+1) Install server dependency: `npm i razorpay`.
+2) Add environment variables:
+   RZP_KEY_ID=rzp_test_xxx
+   RZP_KEY_SECRET=your_test_secret
+   NEXT_PUBLIC_RZP_KEY_ID=rzp_test_xxx  // optional: to expose key_id to client
+3) The server create-order expects amount in paise; the snippet multiplies rupees by 100.
+4) The verify endpoint updates Order.paymentStatus and paymentId when orderId is supplied.
+*/

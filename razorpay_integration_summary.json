@@ -1,0 +1,14 @@
+{
+  "created_files": [
+    "/mnt/data/LiveMart_project/LiveMart-OOPSProject--master/pages/api/payments/razorpay/create-order.ts",
+    "/mnt/data/LiveMart_project/LiveMart-OOPSProject--master/pages/api/payments/razorpay/verify-payment.ts",
+    "/mnt/data/LiveMart_project/LiveMart-OOPSProject--master/checkout.razorpay.patch.txt"
+  ],
+  "next_steps": [
+    "Run `npm i razorpay` in project root to install the Razorpay SDK.",
+    "Add environment variables to your .env.local: RZP_KEY_ID, RZP_KEY_SECRET, NEXT_PUBLIC_RZP_KEY_ID (optional).",
+    "Apply the checkout snippet patch: replace the Stripe online flow in pages/checkout.tsx with the provided snippet in checkout.razorpay.patch.txt.",
+    "Test in Razorpay test mode (use test keys).",
+    "Ensure server has access to MongoDB and that Order model has paymentId and paymentStatus fields (the project appears to have them)."
+  ]
+}
